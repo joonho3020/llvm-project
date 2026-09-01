@@ -215,6 +215,8 @@ class RISCVAsmParser : public MCTargetAsmParser {
   ParseStatus parseGPRPair(OperandVector &Operands, bool IsRV64Inst);
   ParseStatus parseFRMArg(OperandVector &Operands);
   ParseStatus parseFenceArg(OperandVector &Operands);
+  ParseStatus parseXIdxIndexFormat(OperandVector &Operands);
+  ParseStatus parseXIdxScale(OperandVector &Operands);
   ParseStatus parseRegList(OperandVector &Operands, bool MustIncludeS0 = false);
   ParseStatus parseRegListS0(OperandVector &Operands) {
     return parseRegList(Operands, /*MustIncludeS0=*/true);
@@ -641,6 +643,12 @@ public:
   /// Return true if the operand is a valid for the fence instruction e.g.
   /// ('iorw').
   bool isFenceArg() const { return Kind == KindTy::Fence; }
+
+  bool isXIdxIndexFormat() const {
+    return isUImmPred([](int64_t Imm) { return Imm >= 0 && Imm <= 2; });
+  }
+
+  bool isXIdxScale() const { return isUImm<1>(); }
 
   /// Return true if the operand is a valid floating point rounding mode.
   bool isFRMArg() const { return Kind == KindTy::FRM; }
@@ -2627,6 +2635,65 @@ ParseStatus RISCVAsmParser::parseFenceArg(OperandVector &Operands) {
 ParseFail:
   return TokError("operand must be formed of letters selected in-order from "
                   "'iorw' or be 0");
+}
+
+ParseStatus RISCVAsmParser::parseXIdxIndexFormat(OperandVector &Operands) {
+  if (getLexer().isNot(AsmToken::Identifier))
+    return TokError("operand must be one of 'x', 'uxtw', or 'sxtw'");
+
+  StringRef Identifier = getLexer().getTok().getIdentifier();
+  // The four-operand spelling omits the index format and defaults it to x.
+  // Add both MC operands here so the canonical five-operand instruction still
+  // matches and the instruction printer always emits the explicit spelling.
+  if (Identifier == "scaled" || Identifier == "unscaled") {
+    SMLoc S = getLoc();
+    SMLoc E = getLexer().getTok().getEndLoc();
+    Operands.push_back(RISCVOperand::createImm(
+        MCConstantExpr::create(0, getContext()), S, E, isRV64()));
+    Operands.push_back(RISCVOperand::createImm(
+        MCConstantExpr::create(Identifier == "scaled", getContext()), S, E,
+        isRV64()));
+    Lex();
+    return ParseStatus::Success;
+  }
+
+  unsigned Encoding;
+  if (Identifier == "x")
+    Encoding = 0;
+  else if (Identifier == "uxtw")
+    Encoding = 1;
+  else if (Identifier == "sxtw")
+    Encoding = 2;
+  else
+    return TokError("operand must be one of 'x', 'uxtw', or 'sxtw'");
+
+  SMLoc S = getLoc();
+  SMLoc E = getLexer().getTok().getEndLoc();
+  Operands.push_back(RISCVOperand::createImm(
+      MCConstantExpr::create(Encoding, getContext()), S, E, isRV64()));
+  Lex();
+  return ParseStatus::Success;
+}
+
+ParseStatus RISCVAsmParser::parseXIdxScale(OperandVector &Operands) {
+  if (getLexer().isNot(AsmToken::Identifier))
+    return TokError("operand must be 'scaled' or 'unscaled'");
+
+  StringRef Identifier = getLexer().getTok().getIdentifier();
+  unsigned Encoding;
+  if (Identifier == "unscaled")
+    Encoding = 0;
+  else if (Identifier == "scaled")
+    Encoding = 1;
+  else
+    return TokError("operand must be 'scaled' or 'unscaled'");
+
+  SMLoc S = getLoc();
+  SMLoc E = getLexer().getTok().getEndLoc();
+  Operands.push_back(RISCVOperand::createImm(
+      MCConstantExpr::create(Encoding, getContext()), S, E, isRV64()));
+  Lex();
+  return ParseStatus::Success;
 }
 
 ParseStatus RISCVAsmParser::parseMemOpBaseReg(OperandVector &Operands) {

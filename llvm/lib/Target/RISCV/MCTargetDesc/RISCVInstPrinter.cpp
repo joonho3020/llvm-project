@@ -156,6 +156,39 @@ void RISCVInstPrinter::printFenceArg(const MCInst *MI, unsigned OpNo,
     O << "0";
 }
 
+void RISCVInstPrinter::printXIdxIndexFormat(const MCInst *MI, unsigned OpNo,
+                                            const MCSubtargetInfo &STI,
+                                            raw_ostream &O) {
+  switch (MI->getOperand(OpNo).getImm()) {
+  case 0:
+    O << "x";
+    return;
+  case 1:
+    O << "uxtw";
+    return;
+  case 2:
+    O << "sxtw";
+    return;
+  default:
+    llvm_unreachable("invalid XIdx index format");
+  }
+}
+
+void RISCVInstPrinter::printXIdxScale(const MCInst *MI, unsigned OpNo,
+                                      const MCSubtargetInfo &STI,
+                                      raw_ostream &O) {
+  switch (MI->getOperand(OpNo).getImm()) {
+  case 0:
+    O << "unscaled";
+    return;
+  case 1:
+    O << "scaled";
+    return;
+  default:
+    llvm_unreachable("invalid XIdx scale encoding");
+  }
+}
+
 void RISCVInstPrinter::printFRMArg(const MCInst *MI, unsigned OpNo,
                                    const MCSubtargetInfo &STI, raw_ostream &O) {
   auto FRMArg =

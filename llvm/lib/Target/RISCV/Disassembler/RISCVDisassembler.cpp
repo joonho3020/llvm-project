@@ -400,6 +400,14 @@ static DecodeStatus decodeUImmOperand(MCInst &Inst, uint32_t Imm,
   return MCDisassembler::Success;
 }
 
+static DecodeStatus decodeXIdxIndexFormat(MCInst &Inst, uint32_t Imm,
+                                          int64_t Address,
+                                          const MCDisassembler *Decoder) {
+  if (Imm == 3)
+    return MCDisassembler::Fail;
+  return decodeUImmOperand<2>(Inst, Imm, Address, Decoder);
+}
+
 template <unsigned Width, unsigned LowerBound>
 static DecodeStatus decodeUImmOperandGE(MCInst &Inst, uint32_t Imm,
                                         int64_t Address,
@@ -781,6 +789,7 @@ static constexpr FeatureBitset XAndesGroup = {
 
 static constexpr DecoderListEntry DecoderList32[]{
     // Vendor Extensions
+    {DecoderTableXIdx32, {RISCV::FeatureVendorXIdx}, "XIdx"},
     {DecoderTableXVentana32,
      {RISCV::FeatureVendorXVentanaCondOps},
      "XVentanaCondOps"},

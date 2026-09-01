@@ -6,6 +6,8 @@
 # RUN:   -mattr=+m | FileCheck %s --check-prefixes=RV32M
 # RUN: llvm-mc %s -triple=riscv64 -filetype=asm -riscv-add-build-attributes \
 # RUN:   -mattr=+m | FileCheck %s --check-prefixes=RV64M
+# RUN: llvm-mc %s -triple=riscv64 -filetype=asm -riscv-add-build-attributes \
+# RUN:   -mattr=+xidx | FileCheck %s --check-prefixes=RV64XIDX
 
 # RV32-NOT: attribute 4
 # RV32: attribute 5, "rv32i2p1"
@@ -18,3 +20,6 @@
 
 # RV64M-NOT: attribute 4
 # RV64M: attribute 5, "rv64i2p1_m2p0_zmmul1p0"
+
+# RV64XIDX-NOT: attribute 4
+# RV64XIDX: attribute 5, "rv64i2p1_xidx1p0"

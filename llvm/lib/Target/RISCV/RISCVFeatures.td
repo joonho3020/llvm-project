@@ -1104,6 +1104,14 @@ def HasStdExtZbbOrZbkbOrP
 // Vendor extensions
 //===----------------------------------------------------------------------===//
 
+// XIdx Extension
+
+def FeatureVendorXIdx
+    : RISCVExtension<1, 0, "Indexed scalar memory operations">;
+def HasVendorXIdx : Predicate<"Subtarget->hasVendorXIdx()">,
+                    AssemblerPredicate<(all_of FeatureVendorXIdx),
+                        "'XIdx' (Indexed scalar memory operations)">;
+
 // Ventana Extensions
 
 def FeatureVendorXVentanaCondOps
