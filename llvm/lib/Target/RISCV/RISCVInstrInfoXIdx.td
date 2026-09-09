@@ -40,6 +40,15 @@ def xidx_scale : RISCVOp {
   let OperandType = "OPERAND_UIMM1";
 }
 
+class XIdxAddr<int NaturalShift>
+    : ComplexPattern<i64, 4, "SelectXIdxAddr<"#NaturalShift#">",
+                     [], [], 10>;
+
+def XIdxAddrByte : XIdxAddr<0>;
+def XIdxAddrHalf : XIdxAddr<1>;
+def XIdxAddrWord : XIdxAddr<2>;
+def XIdxAddrDouble : XIdxAddr<3>;
+
 class XIdxInst<bits<4> funct4, bits<3> width, dag outs, dag ins,
                string opcodestr, string argstr>
     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatR> {
@@ -103,3 +112,35 @@ def XIDX_SW : XIdxStore<0b010, "swx">,
 def XIDX_SD : XIdxStore<0b011, "sdx">,
               Sched<[WriteSTD, ReadStoreData, ReadMemBase]>;
 } // Predicates = [HasVendorXIdx, IsRV64]
+
+multiclass XIdxLoadPat<PatFrag LoadOp, RVInst Inst, ComplexPattern Addr> {
+  def : Pat<(i64 (LoadOp (Addr (i64 GPR:$rs1), (i64 GPR:$rs2),
+                                uimm2:$index_format, uimm1:$scale))),
+            (Inst GPR:$rs1, GPR:$rs2, uimm2:$index_format, uimm1:$scale)>;
+}
+
+multiclass XIdxStorePat<PatFrag StoreOp, RVInst Inst, ComplexPattern Addr> {
+  def : Pat<(StoreOp (i64 GPR:$rs3),
+                     (Addr (i64 GPR:$rs1), (i64 GPR:$rs2),
+                           uimm2:$index_format, uimm1:$scale)),
+            (Inst GPR:$rs3, GPR:$rs1, GPR:$rs2,
+                  uimm2:$index_format, uimm1:$scale)>;
+}
+
+let Predicates = [HasVendorXIdx, IsRV64], AddedComplexity = 10 in {
+  defm : XIdxLoadPat<sextloadi8, XIDX_LB, XIdxAddrByte>;
+  defm : XIdxLoadPat<zextloadi8, XIDX_LBU, XIdxAddrByte>;
+  defm : XIdxLoadPat<extloadi8, XIDX_LBU, XIdxAddrByte>;
+  defm : XIdxLoadPat<sextloadi16, XIDX_LH, XIdxAddrHalf>;
+  defm : XIdxLoadPat<zextloadi16, XIDX_LHU, XIdxAddrHalf>;
+  defm : XIdxLoadPat<extloadi16, XIDX_LHU, XIdxAddrHalf>;
+  defm : XIdxLoadPat<sextloadi32, XIDX_LW, XIdxAddrWord>;
+  defm : XIdxLoadPat<zextloadi32, XIDX_LWU, XIdxAddrWord>;
+  defm : XIdxLoadPat<extloadi32, XIDX_LWU, XIdxAddrWord>;
+  defm : XIdxLoadPat<load, XIDX_LD, XIdxAddrDouble>;
+
+  defm : XIdxStorePat<truncstorei8, XIDX_SB, XIdxAddrByte>;
+  defm : XIdxStorePat<truncstorei16, XIDX_SH, XIdxAddrHalf>;
+  defm : XIdxStorePat<truncstorei32, XIDX_SW, XIdxAddrWord>;
+  defm : XIdxStorePat<store, XIDX_SD, XIdxAddrDouble>;
+}

@@ -3082,6 +3082,131 @@ bool RISCVDAGToDAGISel::SelectAddrRegRegScale(SDValue Addr,
   return false;
 }
 
+bool RISCVDAGToDAGISel::SelectXIdxAddr(SDValue Addr, unsigned NaturalShift,
+                                       SDValue &Base, SDValue &Index,
+                                       SDValue &IndexFormat, SDValue &Scale) {
+  if (Addr.getOpcode() != ISD::ADD)
+    return false;
+
+  EVT VT = Addr.getSimpleValueType();
+  SDLoc DL(Addr);
+
+  auto MatchScaledIndex = [NaturalShift](SDValue N, SDValue &Unshifted) {
+    if (NaturalShift == 0 ||
+        N.getOpcode() != ISD::SHL ||
+        !isa<ConstantSDNode>(N.getOperand(1)) ||
+        N.getConstantOperandVal(1) != NaturalShift)
+      return false;
+    Unshifted = N.getOperand(0);
+    return true;
+  };
+
+  SDValue IndexExpr;
+  bool IsScaled = false;
+  int64_t BaseOffset = 0;
+  bool HasBaseOffset = false;
+
+  // Fold a small constant displacement into the base when the address has
+  // the form base + index + constant. Xidx itself has no displacement field,
+  // so this will eventually become an ADDI followed by an Xidx operation.
+  // SelectionDAG normally canonicalizes an ADD constant onto operand 1.
+  if (auto *Offset = dyn_cast<ConstantSDNode>(Addr.getOperand(1))) {
+    // For an address such as base + (index << 3) + 24, Addr is expected to
+    // have the shape ADD(ADD(base, SHL(index, 3)), 24). Remove the outer
+    // constant temporarily so that the inner base/index pair can be matched.
+    SDValue Inner = Addr.getOperand(0);
+
+    // A lone base + constant is better represented by a normal load/store
+    // with an immediate offset. Also require the offset to fit a RISC-V ADDI,
+    // since that is how it will be added to the selected base below.
+    if (Inner.getOpcode() != ISD::ADD ||
+        !isInt<12>(Offset->getSExtValue()))
+      return false;
+
+    // Save the displacement until after we decide which commutative ADD
+    // operand is the base and which is the index.
+    BaseOffset = Offset->getSExtValue();
+    HasBaseOffset = true;
+
+    // The inner ADD may be either ADD(base, index-expression) or
+    // ADD(index-expression, base), so inspect both operands.
+    SDValue Inner0 = Inner.getOperand(0);
+    SDValue Inner1 = Inner.getOperand(1);
+
+    // If the first operand is shifted by the access width's natural amount,
+    // use its unshifted input as rs2 and the other operand as rs1.
+    if (MatchScaledIndex(Inner0, IndexExpr)) {
+      Base = Inner1;
+      IsScaled = true;
+    } else if (MatchScaledIndex(Inner1, IndexExpr)) {
+      // Handle the same scaled address with the ADD operands commuted.
+      Base = Inner0;
+      IsScaled = true;
+    } else {
+      // Neither operand has the natural scale. Treat the pair as an unscaled
+      // base-plus-index address; extension analysis below may still swap them.
+      Base = Inner0;
+      IndexExpr = Inner1;
+    }
+  } else {
+    // With no constant displacement, decompose Addr itself as the
+    // base-plus-index pair using the same scaled/unscaled rules.
+    SDValue Addr0 = Addr.getOperand(0);
+    SDValue Addr1 = Addr.getOperand(1);
+    if (MatchScaledIndex(Addr0, IndexExpr)) {
+      Base = Addr1;
+      IsScaled = true;
+    } else if (MatchScaledIndex(Addr1, IndexExpr)) {
+      Base = Addr0;
+      IsScaled = true;
+    } else {
+      Base = Addr0;
+      IndexExpr = Addr1;
+    }
+  }
+
+  // Prefer an extendable operand as the index for unscaled, commutative
+  // additions. This lets Xidx remove the explicit extension as well as the
+  // address add.
+  SDValue UnwrappedIndex;
+  unsigned Format = 0;
+  if (selectZExtBits(IndexExpr, 32, UnwrappedIndex)) {
+    Index = UnwrappedIndex;
+    Format = 1;
+  } else if (selectSExtBits(IndexExpr, 32, UnwrappedIndex)) {
+    Index = UnwrappedIndex;
+    Format = 2;
+  } else if (!IsScaled) {
+    SDValue AlternateIndex = Base;
+    SDValue AlternateBase = IndexExpr;
+    if (selectZExtBits(AlternateIndex, 32, UnwrappedIndex)) {
+      Base = AlternateBase;
+      Index = UnwrappedIndex;
+      Format = 1;
+    } else if (selectSExtBits(AlternateIndex, 32, UnwrappedIndex)) {
+      Base = AlternateBase;
+      Index = UnwrappedIndex;
+      Format = 2;
+    } else {
+      Index = IndexExpr;
+    }
+  } else {
+    Index = IndexExpr;
+  }
+
+  // Reassociate base + index + offset as (base + offset) + index. The ADDI is
+  // a separate machine instruction because Xidx has no immediate field.
+  if (HasBaseOffset)
+    Base = SDValue(CurDAG->getMachineNode(
+                       RISCV::ADDI, DL, VT, Base,
+                       CurDAG->getSignedTargetConstant(BaseOffset, DL, VT)),
+                   0);
+
+  IndexFormat = CurDAG->getTargetConstant(Format, DL, VT);
+  Scale = CurDAG->getTargetConstant(IsScaled, DL, VT);
+  return true;
+}
+
 bool RISCVDAGToDAGISel::SelectAddrRegReg(SDValue Addr, SDValue &Base,
                                          SDValue &Offset) {
   if (Addr.getOpcode() != ISD::ADD)

@@ -2030,6 +2030,19 @@ bool RISCVTargetLowering::isLegalAddressingMode(const DataLayout &DL,
   if (Subtarget.hasVInstructions() && isa<VectorType>(Ty))
     return AM.HasBaseReg && AM.Scale == 0 && !AM.BaseOffs;
 
+  // Xidx scalar loads and stores can fold a second register into the address.
+  // They have no displacement field, and the index is either unscaled or
+  // scaled by the size of the memory access. Be conservative about the access
+  // types advertised to LSR: these are the integer/pointer types covered by
+  // the Xidx SelectionDAG patterns.
+  if (Subtarget.is64Bit() && Subtarget.hasVendorXIdx() && AM.HasBaseReg &&
+      !AM.BaseOffs && AM.Scale && Ty->isIntOrPtrTy()) {
+    uint64_t TypeBits = DL.getTypeSizeInBits(Ty).getFixedValue();
+    if ((TypeBits == 8 || TypeBits == 16 || TypeBits == 32 || TypeBits == 64) &&
+        (AM.Scale == 1 || AM.Scale == TypeBits / 8))
+      return true;
+  }
+
   // Require a 12-bit signed offset.
   if (!isInt<12>(AM.BaseOffs))
     return false;
