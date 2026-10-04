@@ -140,6 +140,54 @@ void RISCVDAGToDAGISel::PreprocessISelDAG() {
 
   if (MadeChange)
     CurDAG->RemoveDeadNodes();
+
+  findXIdxSharedOffsets();
+}
+
+void RISCVDAGToDAGISel::findXIdxSharedOffsets() {
+  XIdxSharedOffsets.clear();
+  if (!Subtarget->is64Bit() || !Subtarget->hasVendorXIdx())
+    return;
+
+  // One displaced base costs at most the shared address ADD it replaces,
+  // and MachineLICM can hoist it when the base is loop invariant. Several
+  // different offsets instead create several live bases, so keep those
+  // accesses on the ordinary immediate-offset path.
+  auto IsMemoryAddressUse = [](SDNode *User, SDValue Address) {
+    auto *Mem = dyn_cast<LSBaseSDNode>(User);
+    if (!Mem || Mem->getBasePtr() != Address ||
+        Mem->getAddressingMode() != ISD::UNINDEXED)
+      return false;
+    EVT MemVT = Mem->getMemoryVT();
+    if (MemVT != MVT::i8 && MemVT != MVT::i16 && MemVT != MVT::i32 &&
+        MemVT != MVT::i64)
+      return false;
+    // An address stored as data still needs its original computation.
+    auto *Store = dyn_cast<StoreSDNode>(User);
+    return !Store || Store->getValue() != Address;
+  };
+
+  // Inspect the complete DAG, not partially selected users: otherwise the
+  // last selected offset could appear to be the only offset remaining.
+  for (SDNode &N : CurDAG->allnodes()) {
+    if (N.getOpcode() != ISD::ADD || N.use_empty())
+      continue;
+    auto *Offset = dyn_cast<ConstantSDNode>(N.getOperand(1));
+    if (!Offset || !isInt<12>(Offset->getSExtValue()))
+      continue;
+    SDValue Inner = N.getOperand(0);
+    if (Inner.getOpcode() != ISD::ADD)
+      continue;
+
+    SDValue Address(&N, 0);
+    if (all_of(N.users(), [&](SDNode *User) {
+          return IsMemoryAddressUse(User, Address);
+        }) &&
+        all_of(Inner->users(), [&](SDNode *User) {
+          return User == &N || IsMemoryAddressUse(User, Inner);
+        }))
+      XIdxSharedOffsets.insert(&N);
+  }
 }
 
 void RISCVDAGToDAGISel::PostprocessISelDAG() {
@@ -3121,6 +3169,18 @@ bool RISCVDAGToDAGISel::SelectXIdxAddr(SDValue Addr, unsigned NaturalShift,
     // since that is how it will be added to the selected base below.
     if (Inner.getOpcode() != ISD::ADD ||
         !isInt<12>(Offset->getSExtValue()))
+      return false;
+
+    // Reassociation creates an ADDI for this memory operation. If either
+    // address is shared, normally keep the original computation so other
+    // accesses can use immediate offsets or a materialized pointer. Permit
+    // the single-displacement, memory-only group identified before selection:
+    // its one displaced base can be shared and potentially loop-hoisted.
+    // Multiple displacements (e.g. +160 and +320) remain unprofitable here.
+    // This restriction only applies to displacement reassociation: multiple
+    // zero-displacement loads/stores can still fold a shared base+index.
+    if ((!Addr.hasOneUse() || !Inner.hasOneUse()) &&
+        !XIdxSharedOffsets.contains(Addr.getNode()))
       return false;
 
     // Save the displacement until after we decide which commutative ADD

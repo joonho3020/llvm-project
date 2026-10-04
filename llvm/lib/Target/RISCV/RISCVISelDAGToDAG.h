@@ -24,6 +24,12 @@ namespace llvm {
 class RISCVDAGToDAGISel : public SelectionDAGISel {
   const RISCVSubtarget *Subtarget = nullptr;
 
+  // Shared addresses with just one nonzero displacement and only Xidx-capable
+  // memory users. Snapshot before selection changes their use lists.
+  SmallPtrSet<const SDNode *, 8> XIdxSharedOffsets;
+
+  void findXIdxSharedOffsets();
+
 public:
   RISCVDAGToDAGISel() = delete;
 
