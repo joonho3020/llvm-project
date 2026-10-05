@@ -400,7 +400,7 @@ static DecodeStatus decodeUImmOperand(MCInst &Inst, uint32_t Imm,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus decodeXIdxIndexFormat(MCInst &Inst, uint32_t Imm,
+static DecodeStatus decodeXIdxOption(MCInst &Inst, uint32_t Imm,
                                           int64_t Address,
                                           const MCDisassembler *Decoder) {
   if (Imm == 3)

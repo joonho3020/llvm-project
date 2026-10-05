@@ -156,7 +156,7 @@ void RISCVInstPrinter::printFenceArg(const MCInst *MI, unsigned OpNo,
     O << "0";
 }
 
-void RISCVInstPrinter::printXIdxIndexFormat(const MCInst *MI, unsigned OpNo,
+void RISCVInstPrinter::printXIdxOption(const MCInst *MI, unsigned OpNo,
                                             const MCSubtargetInfo &STI,
                                             raw_ostream &O) {
   switch (MI->getOperand(OpNo).getImm()) {
@@ -170,7 +170,7 @@ void RISCVInstPrinter::printXIdxIndexFormat(const MCInst *MI, unsigned OpNo,
     O << "sxtw";
     return;
   default:
-    llvm_unreachable("invalid XIdx index format");
+    llvm_unreachable("invalid XIdx option");
   }
 }
 

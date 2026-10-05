@@ -2,25 +2,25 @@
 # RUN:   | llvm-objdump -d --mattr=+xidx - \
 # RUN:   | FileCheck %s
 
-# Reserved index format (idxFmt=11).
+# Reserved index option (option=11).
 .word 0x06c5850b
 # CHECK: 06c5850b <unknown>
 
-# Reserved load width 111.
-.word 0x00c5f50b
-# CHECK: 00c5f50b <unknown>
+# Reserved unsigned doubleword load (opc=01, size=11).
+.word 0x08c5b50b
+# CHECK: 08c5b50b <unknown>
 
-# Reserved store widths 100 through 111.
-.word 0x10c5c50b
-# CHECK: 10c5c50b <unknown>
-.word 0x10c5d50b
-# CHECK: 10c5d50b <unknown>
-.word 0x10c5e50b
-# CHECK: 10c5e50b <unknown>
-.word 0x10c5f50b
-# CHECK: 10c5f50b <unknown>
+# Reserved opc=11 for every size.
+.word 0x18c5850b
+# CHECK: 18c5850b <unknown>
+.word 0x18c5950b
+# CHECK: 18c5950b <unknown>
+.word 0x18c5a50b
+# CHECK: 18c5a50b <unknown>
+.word 0x18c5b50b
+# CHECK: 18c5b50b <unknown>
 
-# Reserved funct4 values 0010 through 1111.
+# Reserved nonzero bits [31:29] (with both values of the store bit).
 .word 0x20c5850b
 # CHECK: 20c5850b <unknown>
 .word 0x30c5850b

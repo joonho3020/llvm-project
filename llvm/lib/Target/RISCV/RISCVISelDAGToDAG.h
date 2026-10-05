@@ -81,12 +81,12 @@ public:
   }
 
   bool SelectXIdxAddr(SDValue Addr, unsigned NaturalShift, SDValue &Base,
-                      SDValue &Index, SDValue &IndexFormat, SDValue &Scale);
+                      SDValue &Index, SDValue &Option, SDValue &Scale);
 
   template <unsigned NaturalShift>
   bool SelectXIdxAddr(SDValue Addr, SDValue &Base, SDValue &Index,
-                      SDValue &IndexFormat, SDValue &Scale) {
-    return SelectXIdxAddr(Addr, NaturalShift, Base, Index, IndexFormat, Scale);
+                      SDValue &Option, SDValue &Scale) {
+    return SelectXIdxAddr(Addr, NaturalShift, Base, Index, Option, Scale);
   }
 
   bool SelectAddrRegReg(SDValue Addr, SDValue &Base, SDValue &Offset);

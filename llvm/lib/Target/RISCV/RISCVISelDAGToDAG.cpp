@@ -3132,7 +3132,7 @@ bool RISCVDAGToDAGISel::SelectAddrRegRegScale(SDValue Addr,
 
 bool RISCVDAGToDAGISel::SelectXIdxAddr(SDValue Addr, unsigned NaturalShift,
                                        SDValue &Base, SDValue &Index,
-                                       SDValue &IndexFormat, SDValue &Scale) {
+                                       SDValue &Option, SDValue &Scale) {
   if (Addr.getOpcode() != ISD::ADD)
     return false;
 
@@ -3229,24 +3229,24 @@ bool RISCVDAGToDAGISel::SelectXIdxAddr(SDValue Addr, unsigned NaturalShift,
   // additions. This lets Xidx remove the explicit extension as well as the
   // address add.
   SDValue UnwrappedIndex;
-  unsigned Format = 0;
+  unsigned OptionValue = 0;
   if (selectZExtBits(IndexExpr, 32, UnwrappedIndex)) {
     Index = UnwrappedIndex;
-    Format = 1;
+    OptionValue = 1;
   } else if (selectSExtBits(IndexExpr, 32, UnwrappedIndex)) {
     Index = UnwrappedIndex;
-    Format = 2;
+    OptionValue = 2;
   } else if (!IsScaled) {
     SDValue AlternateIndex = Base;
     SDValue AlternateBase = IndexExpr;
     if (selectZExtBits(AlternateIndex, 32, UnwrappedIndex)) {
       Base = AlternateBase;
       Index = UnwrappedIndex;
-      Format = 1;
+      OptionValue = 1;
     } else if (selectSExtBits(AlternateIndex, 32, UnwrappedIndex)) {
       Base = AlternateBase;
       Index = UnwrappedIndex;
-      Format = 2;
+      OptionValue = 2;
     } else {
       Index = IndexExpr;
     }
@@ -3262,7 +3262,7 @@ bool RISCVDAGToDAGISel::SelectXIdxAddr(SDValue Addr, unsigned NaturalShift,
                        CurDAG->getSignedTargetConstant(BaseOffset, DL, VT)),
                    0);
 
-  IndexFormat = CurDAG->getTargetConstant(Format, DL, VT);
+  Option = CurDAG->getTargetConstant(OptionValue, DL, VT);
   Scale = CurDAG->getTargetConstant(IsScaled, DL, VT);
   return true;
 }

@@ -215,7 +215,7 @@ class RISCVAsmParser : public MCTargetAsmParser {
   ParseStatus parseGPRPair(OperandVector &Operands, bool IsRV64Inst);
   ParseStatus parseFRMArg(OperandVector &Operands);
   ParseStatus parseFenceArg(OperandVector &Operands);
-  ParseStatus parseXIdxIndexFormat(OperandVector &Operands);
+  ParseStatus parseXIdxOption(OperandVector &Operands);
   ParseStatus parseXIdxScale(OperandVector &Operands);
   ParseStatus parseRegList(OperandVector &Operands, bool MustIncludeS0 = false);
   ParseStatus parseRegListS0(OperandVector &Operands) {
@@ -644,7 +644,7 @@ public:
   /// ('iorw').
   bool isFenceArg() const { return Kind == KindTy::Fence; }
 
-  bool isXIdxIndexFormat() const {
+  bool isXIdxOption() const {
     return isUImmPred([](int64_t Imm) { return Imm >= 0 && Imm <= 2; });
   }
 
@@ -2637,12 +2637,12 @@ ParseFail:
                   "'iorw' or be 0");
 }
 
-ParseStatus RISCVAsmParser::parseXIdxIndexFormat(OperandVector &Operands) {
+ParseStatus RISCVAsmParser::parseXIdxOption(OperandVector &Operands) {
   if (getLexer().isNot(AsmToken::Identifier))
     return TokError("operand must be one of 'x', 'uxtw', or 'sxtw'");
 
   StringRef Identifier = getLexer().getTok().getIdentifier();
-  // The four-operand spelling omits the index format and defaults it to x.
+  // The four-operand spelling omits the index option and defaults it to x.
   // Add both MC operands here so the canonical five-operand instruction still
   // matches and the instruction printer always emits the explicit spelling.
   if (Identifier == "scaled" || Identifier == "unscaled") {
